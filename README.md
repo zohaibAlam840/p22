@@ -1,119 +1,84 @@
-# Task Manager (Next.js + Prisma + Postgres)
+# Next.js + Supabase Take-Home (Org-Scoped Ticketing)
 
-A multi-tenant task manager built with **Next.js (App Router)**, **Prisma**, and **Postgres**.  
-It supports **Workspaces → Projects → Tasks**, **role-based access control (RBAC)**, a **My Tasks** view (cross-workspace), **activity logs**, and **real-time notifications** using **Server-Sent Events (SSE)**.
-
----
-
-## Features
-
-### Core
-- Email/password authentication (login/signup)
-- Multi-tenant structure:
-  - **Workspaces** (with members and roles)
-  - **Projects** inside workspaces
-  - **Tasks** inside projects
-- **My Tasks** page: shows tasks assigned to the signed-in user across all workspaces/projects
-- Task fields: status, priority, due date, assignee, description
-- Activity logging on key task actions (create/update)
-
-### RBAC (Workspace Roles)
-- Roles: `OWNER`, `ADMIN`, `MEMBER`
-- Typical policies:
-  - OWNER/ADMIN can manage workspace, members, projects, tasks
-  - MEMBER can view workspace data and update only tasks assigned to them (enforced in API)
-
-### Real-time notifications (SSE)
-- Notification stream via **Server-Sent Events**
-- Used for events like:
-  - task assigned to you
-  - task status changed
-  - member invited/added 
-
-> Note: SSE is implemented as a lightweight pub/sub style stream (server emits events; client subscribes).  
-> For multi-instance scaling, swap the in-memory pub/sub with Redis pub/sub (future enhancement).
-
----
-
-## Tech Stack
-
-- **Frontend:** Next.js (App Router), React, TypeScript
-- **UI:** shadcn/ui, Tailwind CSS, lucide-react, sonner
-- **Backend:** Next.js Route Handlers (`app/api/**`)
-- **Database:** Postgres
-- **ORM:** Prisma
-- **Auth:** session/JWT (project-specific implementation)
-
----
+This project is a multi-tenant (organization-scoped) ticketing app built with Next.js (App Router) and Supabase Postgres. Data isolation is enforced at the database level using Row Level Security (RLS). Realtime and reads are scoped by `org_id`.
 
 ## Screenshots / Visuals
 
-### Prisma Schema (Prisma Studio)
-![Prisma Schema](./docs/assets/prisma-schema.png)
+### Schema 
+![Schema](./docs/assets/p3.png)
 
 ### App UI
-![Dashboard](./docs/assets/dashboard.png)
+![Dashboard](./docs/assets/p1.png)
+![Dashboard](./docs/assets/p2.png)
+
+## Tech Stack
+
+- Next.js (App Router)
+- Supabase (Postgres + Auth )
+- Postgres RLS policies for tenant isolation
+- SQL migrations under `supabase/migrations/`
+- Node seed script to generate >= 10,000 tickets
 
 ---
 
-## Folder Structure (high level)
+## Features Implemented
 
-- `app/`
-  - `(auth)/login`, `(auth)/signup`
-  - `(protected)/dashboard`
-  - `(protected)/my-task`
-  - `(protected)/workspaces/[workspaceId]/...`
-  - `api/` (REST endpoints)
-- `components/`
-  - `app-shell/` (Topbar/Sidebar, workspace switcher)
-  - `workspaces/` (tables, dialogs, charts)
-  - `ui/` (shadcn components)
-- `lib/`
-  - `api/` (frontend API clients)
-  - `auth/`, `rbac/`, `validators/` (zod schemas)
-- `prisma/` (schema + migrations)
-- `certs/` (SSL bundle if needed for Postgres)
+- Organizations and memberships (roles: OWNER, ADMIN, MEMBER, VIEWER)
+- Tickets with status transitions (OPEN → INVESTIGATING → MITIGATED → RESOLVED)
+- Tags
+- Ticket timeline/events and tag linking (ticket_tags)
+- Attachments metadata table (storage integration depends on your UI)
+- Audit logs (append-only via triggers; viewable via RLS)
+
+> Note: Organization creation must be performed via server-side logic or RPC if you keep no INSERT policy on `organizations`.
 
 ---
 
-## API Overview (examples)
+## Repository Structure (typical)
 
-### Workspaces
-- `GET /api/workspaces`
-- `POST /api/workspaces`
-- `GET /api/workspaces/[id]`
-- `DELETE /api/workspaces/[id]` (OWNER)
-
-### Members
-- `GET /api/workspaces/[id]/members`
-- `POST /api/workspaces/[id]/members` (OWNER/ADMIN)
-- `PATCH /api/workspaces/[id]/members/[memberId]` (OWNER)
-- `DELETE /api/workspaces/[id]/members/[memberId]` (OWNER/ADMIN)
-
-### Projects
-- `GET /api/projects?workspaceId=...`
-- `POST /api/projects`
-- `GET /api/projects/[id]`
-- `PATCH /api/projects/[id]`
-- `DELETE /api/projects/[id]`
-
-### Tasks
-- `GET /api/tasks?projectId=...&status=...&priority=...&assignedTo=...`
-- `POST /api/tasks`
-- `PATCH /api/tasks/[id]`
-- `DELETE /api/tasks/[id]`
-- `GET /api/tasks/[id]/logs`
-
-### My Tasks
-- `GET /api/assigned-tasks?status=...&priority=...` (tasks assigned to current user)
-
-### Notifications (SSE)
-- `GET /api/notifications/stream` (SSE stream)
+- `app/` – Next.js routes and pages
+- `components/` – UI components and dialogs
+- `lib/` – Supabase client wrappers, API helpers, validators
+- `supabase/migrations/` – SQL migrations (schema, functions, triggers, RLS, indexes)
+- `scripts/seedTickets.js` – Seed script to generate >= 10,000 tickets
 
 ---
 
-## Local Setup
+## Prerequisites
 
-### 1) Install
-```bash
-npm install
+- Node.js 18+ (recommended)
+- A Supabase project (hosted) OR Supabase CLI for local development
+- Access to your Supabase Postgres connection string (DATABASE_URL)
+
+---
+
+## Environment Variables
+
+Create a `.env.local` (for Next.js) and a `.env` (for scripts), or use one file if you prefer.
+
+### `.env.example`
+
+```env
+# Next.js
+NEXT_PUBLIC_SITE_URL=http://localhost:3000
+
+# Supabase client (browser)
+NEXT_PUBLIC_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+NEXT_PUBLIC_SUPABASE_ANON_KEY=YOUR_SUPABASE_ANON_KEY
+
+# Server-only (do NOT expose to browser)
+SUPABASE_SERVICE_ROLE_KEY=YOUR_SUPABASE_SERVICE_ROLE_KEY
+
+# Postgres connection string (used by seed script and/or prisma tools if applicable)
+# Important: include sslmode=require for Supabase hosted
+DATABASE_URL=postgresql://USER:PASSWORD@HOST:5432/postgres?schema=public&sslmode=require
+
+# Seeding
+# Use a real auth user UUID from Supabase Auth -> Users (so seeded tickets are visible via RLS)
+SEED_USER_ID=00000000-0000-0000-0000-000000000000
+SEED_TICKETS_COUNT=10000
+SEED_ORG_NAME="Seed Org"
+
+# If using NextAuth (only if your repo uses it)
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=replace_with_a_long_random_string
